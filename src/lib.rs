@@ -65,8 +65,8 @@ impl Plugin for Midithreshold {
 		self.note_value = wmidi::Note::try_from(*(ports.note_value) as u8).unwrap();
 		self.note_on_velocity = (*(ports.note_on_velocity) as u8).try_into().unwrap();
 		self.note_off_velocity = (*(ports.note_off_velocity) as u8).try_into().unwrap();
-		self.input_channel = wmidi::Channel::from_index(*(ports.input_channel) as u8).unwrap();
-		self.output_channel = wmidi::Channel::from_index(*(ports.output_channel) as u8).unwrap();
+		self.input_channel = wmidi::Channel::from_index(*(ports.input_channel) as u8 - 1u8).unwrap();
+		self.output_channel = wmidi::Channel::from_index(*(ports.output_channel) as u8 - 1u8).unwrap();
 
         let input_sequence = ports
             .input
@@ -99,7 +99,7 @@ impl Plugin for Midithreshold {
 								.init(
 									timestamp,
 									self.urids.midi.wmidi,
-									MidiMessage::NoteOff(self.output_channel.into(), self.note_value.into(), self.note_off_velocity.into())
+									MidiMessage::NoteOff(self.output_channel, self.note_value, self.note_off_velocity)
 								)
 								.unwrap();
 						} else if value >= self.threshold && !self.note_active {
