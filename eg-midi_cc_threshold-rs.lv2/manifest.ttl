@@ -3,7 +3,7 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ui:   <http://lv2plug.in/ns/extensions/ui#> .
 
-<https://github.com/RustAudio/rust-lv2/tree/master/docs/midigate>
+<https://github.com/Ninja-Koala/midi-cc-threshold-to-note>
 	a lv2:Plugin ;
-	lv2:binary <libmidigate.so> ;
-	rdfs:seeAlso <midigate.ttl> .
+	lv2:binary <libmidi_cc_threshold.so> ;
+	rdfs:seeAlso <midi_cc_threshold.ttl> .

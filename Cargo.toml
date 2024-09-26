@@ -1,10 +1,10 @@
 # The `Cargo.toml` file is pretty similiar too. This plugin needs no extra features, but it needs
 # the `wmidi` crate, which provides the enums to handle MIDI messages. 
 [package]
-name = "midigate"
+name = "midi_cc_threshold"
 version = "0.1.0"
-authors = ["Jan-Oliver 'Janonard' Opdenhövel <jan.opdenhoevel@protonmail.com>"]
-edition = "2018"
+authors = ["NinjaKoala"]
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]

@@ -21,14 +21,14 @@ pub struct URIDs {
     unit: UnitURIDCollection,
 }
 
-#[uri("https://github.com/RustAudio/rust-lv2/tree/master/docs/midigate")]
-pub struct Midigate {
+#[uri("https://github.com/Ninja-Koala/midi-cc-threshold-to-note")]
+pub struct Midithreshold {
     n_active_notes: u64,
     program: u8,
     urids: URIDs,
 }
 
-impl Midigate {
+impl Midithreshold {
     // A function to write a chunk of output, to be called from `run()`. If the gate is high, then the input will be passed through for this chunk, otherwise silence is written.
     fn write_output(
         &mut self,
@@ -60,7 +60,7 @@ impl Midigate {
     }
 }
 
-impl Plugin for Midigate {
+impl Plugin for Midithreshold {
     type Ports = Ports;
 
     type InitFeatures = Features<'static>;
@@ -133,4 +133,4 @@ impl Plugin for Midigate {
     }
 }
 
-lv2_descriptors!(Midigate);
+lv2_descriptors!(Midithreshold);
