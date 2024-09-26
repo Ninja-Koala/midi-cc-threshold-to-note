@@ -1,19 +1,17 @@
-// Use the prelude and the `wmidi` crate.
 use lv2::prelude::*;
 use wmidi::*;
 
 #[derive(PortCollection)]
 pub struct Ports {
-    control: InputPort<AtomPort>,
-    input: InputPort<Audio>,
-    output: OutputPort<Audio>,
+    input: InputPort<AtomPort>,
+    output: OutputPort<AtomPort>,
 }
-// Now, an additional host feature is needed. A feature is something that implements the `Feature` trait and usually wraps a certain functionality of the host; In this case mapping URIs to URIDs. The discovery and validation of features is done by the framework.
+
 #[derive(FeatureCollection)]
 pub struct Features<'a> {
     map: LV2Map<'a>,
 }
-// Retrieving URIDs from the host isn't guaranteed to be real-time safe or even fast. Therefore, all URIDs that may be needed should be retrieved when the plugin is instantiated. The `URIDCollection` trait makes this easy: It provides a single method that creates an instance of itself from the mapping feature, which can also be generated using this `derive` macro.
+
 #[derive(URIDCollection)]
 pub struct URIDs {
     atom: AtomURIDCollection,
@@ -23,41 +21,15 @@ pub struct URIDs {
 
 #[uri("https://github.com/Ninja-Koala/midi-cc-threshold-to-note")]
 pub struct Midithreshold {
-    n_active_notes: u64,
-    program: u8,
+	note_active: bool,
+	threshold: U7,
+	note_value: Note,
+	note_on_velocity: U7,
+	note_off_velocity: U7,
+    cc_parameter: U7,
+	input_channel: Channel,
+	output_channel: Channel,
     urids: URIDs,
-}
-
-impl Midithreshold {
-    // A function to write a chunk of output, to be called from `run()`. If the gate is high, then the input will be passed through for this chunk, otherwise silence is written.
-    fn write_output(
-        &mut self,
-        input: &InputPort<Audio>,
-        output: &mut OutputPort<Audio>,
-        offset: usize,
-        mut len: usize,
-    ) {
-        if input.len() < offset + len {
-            len = input.len() - offset;
-        }
-
-        let active = if self.program == 0 {
-            self.n_active_notes > 0
-        } else {
-            self.n_active_notes == 0
-        };
-
-        let input = &input[offset..offset + len];
-        let output = &mut output[offset..offset + len];
-
-        if active {
-            output.copy_from_slice(input);
-        } else {
-            for frame in output.iter_mut() {
-                *frame = 0.0;
-            }
-        }
-    }
 }
 
 impl Plugin for Midithreshold {
@@ -68,68 +40,73 @@ impl Plugin for Midithreshold {
 
     fn new(_plugin_info: &PluginInfo, features: &mut Features<'static>) -> Option<Self> {
         Some(Self {
-            n_active_notes: 0,
-            program: 0,
+            note_active: false,
+			threshold: 64.try_into().unwrap(),
+            note_value: Note::C2,
+			note_on_velocity: 127.try_into().unwrap(),
+			note_off_velocity: 127.try_into().unwrap(),
+            cc_parameter: 0.try_into().unwrap(),
+			input_channel: Channel::Ch1,
+			output_channel: Channel::Ch1,
             urids: features.map.populate_collection()?,
         })
     }
 
-    // This plugin works through the cycle in chunks starting at offset zero. The `offset` represents the current time within this this cycle, so the output from 0 to `offset` has already been written.
-    //
-    // MIDI events are read in a loop. In each iteration, the number of active notes (on note on and note off) or the program (on program change) is updated, then the output is written up until the current event time. Then `offset` is updated and the next event is processed. After the loop the final chunk from the last event to the end of the cycle is emitted.
-    //
-    // There is currently no standard way to describe MIDI programs in LV2, so the host has no way of knowing that these programs exist and should be presented to the user. A future version of LV2 will address this shortcoming.
-    //
-    // This pattern of iterating over input events and writing output along the way is a common idiom for writing sample accurate output based on event input.
-    //
-    // Note that this simple example simply writes input or zero for each sample based on the gate. A serious implementation would need to envelope the transition to avoid aliasing.
     fn run(&mut self, ports: &mut Ports, _: &mut (), _: u32) {
-        let mut offset: usize = 0;
-
-        let control_sequence = ports
-            .control
-            .read(self.urids.atom.sequence)
-            .unwrap()
-            .with_unit(self.urids.unit.frame)
+        let input_sequence = ports
+            .input
+            .read(self.urids.atom.sequence, self.urids.unit.beat)
             .unwrap();
 
-        for (timestamp, message) in control_sequence {
-            let timestamp = timestamp as usize;
+        let mut output_sequence = ports
+            .output
+            .init(
+                self.urids.atom.sequence,
+                TimeStampURID::Frames(self.urids.unit.frame),
+            )
+            .unwrap();
 
-            let message = if let Ok(message) = message.read(self.urids.midi.wmidi) {
+        for (timestamp, atom) in input_sequence {
+
+            let message = if let Some(message) = atom.read(self.urids.midi.wmidi, ()) {
                 message
             } else {
                 continue;
             };
 
             match message {
-                MidiMessage::NoteOn(_, _, _) => self.n_active_notes += 1,
-                MidiMessage::NoteOff(_, _, _) => self.n_active_notes -= 1,
-                MidiMessage::ProgramChange(_, program) => {
-                    let program: u8 = program.into();
-                    if program == 0 || program == 1 {
-                        self.program = program;
-                    }
+                MidiMessage::ControlChange(channel, number, value) => {
+					if channel == self.input_channel &&
+					number == self.cc_parameter {
+						if value < self.threshold && self.note_active {
+							self.note_active = false;
+							output_sequence
+								.init(
+									timestamp,
+									self.urids.midi.wmidi,
+									MidiMessage::NoteOff(self.output_channel.into(), self.note_value.into(), self.note_off_velocity.into())
+								)
+								.unwrap();
+						} else if value >= self.threshold && !self.note_active {
+							self.note_active = true;
+							output_sequence
+								.init(
+									timestamp,
+									self.urids.midi.wmidi,
+									MidiMessage::NoteOn(self.output_channel, self.note_value, self.note_on_velocity)
+								)
+								.unwrap();
+						}
+					}
                 }
                 _ => (),
             }
-
-            self.write_output(&ports.input, &mut ports.output, offset, timestamp + offset);
-            offset += timestamp;
         }
-
-        self.write_output(
-            &ports.input,
-            &mut ports.output,
-            offset,
-            ports.input.len() - offset,
-        );
     }
 
-    // During it's runtime, the host might decide to deactivate the plugin. When the plugin is reactivated, the host calls this method which gives the plugin an opportunity to reset it's internal state.
+	// not sure if i want this
     fn activate(&mut self, _features: &mut Features<'static>) {
-        self.n_active_notes = 0;
-        self.program = 0;
+        self.note_active = false;
     }
 }
 
