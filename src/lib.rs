@@ -3,6 +3,13 @@ use wmidi::*;
 
 #[derive(PortCollection)]
 pub struct Ports {
+    threshold: InputPort<Control>,
+    cc_parameter: InputPort<Control>,
+    note_value: InputPort<Control>,
+    note_on_velocity: InputPort<Control>,
+    note_off_velocity: InputPort<Control>,
+    input_channel: InputPort<Control>,
+    output_channel: InputPort<Control>,
     input: InputPort<AtomPort>,
     output: OutputPort<AtomPort>,
 }
@@ -23,10 +30,10 @@ pub struct URIDs {
 pub struct Midithreshold {
 	note_active: bool,
 	threshold: U7,
+    cc_parameter: U7,
 	note_value: Note,
 	note_on_velocity: U7,
 	note_off_velocity: U7,
-    cc_parameter: U7,
 	input_channel: Channel,
 	output_channel: Channel,
     urids: URIDs,
@@ -42,10 +49,10 @@ impl Plugin for Midithreshold {
         Some(Self {
             note_active: false,
 			threshold: 64.try_into().unwrap(),
+            cc_parameter: 50.try_into().unwrap(),
             note_value: Note::C2,
 			note_on_velocity: 127.try_into().unwrap(),
 			note_off_velocity: 127.try_into().unwrap(),
-            cc_parameter: 0.try_into().unwrap(),
 			input_channel: Channel::Ch1,
 			output_channel: Channel::Ch1,
             urids: features.map.populate_collection()?,
@@ -53,6 +60,14 @@ impl Plugin for Midithreshold {
     }
 
     fn run(&mut self, ports: &mut Ports, _: &mut (), _: u32) {
+		self.threshold = (*(ports.threshold) as u8).try_into().unwrap();
+		self.cc_parameter = (*(ports.cc_parameter) as u8).try_into().unwrap();
+		self.note_value = wmidi::Note::try_from(*(ports.note_value) as u8).unwrap();
+		self.note_on_velocity = (*(ports.note_on_velocity) as u8).try_into().unwrap();
+		self.note_off_velocity = (*(ports.note_off_velocity) as u8).try_into().unwrap();
+		self.input_channel = wmidi::Channel::from_index(*(ports.input_channel) as u8).unwrap();
+		self.output_channel = wmidi::Channel::from_index(*(ports.output_channel) as u8).unwrap();
+
         let input_sequence = ports
             .input
             .read(self.urids.atom.sequence, self.urids.unit.beat)
