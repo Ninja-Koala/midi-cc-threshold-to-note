@@ -82,6 +82,8 @@ impl Plugin for Midithreshold {
             .unwrap();
 
         for (timestamp, atom) in input_sequence {
+            // Every message is forwarded, regardless of it's content.
+            output_sequence.forward(timestamp, atom);
 
             let message = if let Some(message) = atom.read(self.urids.midi.wmidi, ()) {
                 message
